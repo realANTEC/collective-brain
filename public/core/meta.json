@@ -1,10 +1,13 @@
 {
-  "corpus": "wikimedia/wikipedia:20231101.simple",
-  "documents": 47725,
+  "corpus": "wikimedia/wikipedia:20231101.en",
+  "corpusArticles": 6407814,
+  "documents": 3464554,
+  "manifoldSample": 120002,
   "model": "BAAI/bge-small-en-v1.5",
-  "points": 40000,
+  "points": 100000,
   "nodes": 96,
   "quantScale": 16000.0,
-  "projection": "PCA(40) -> UMAP(3, cosine, n_neighbors=25)",
-  "note": "Positions are a real semantic embedding of Simple English Wikipedia."
+  "gpu": "B200",
+  "projection": "PCA(40) -> UMAP(2, cosine, output_metric=haversine)",
+  "note": "Positions are a real semantic embedding of English Wikipedia. All 3464554 substantive articles were embedded and clustered; the manifold was fitted on a 120002 stratified subsample and 100000 points ship to the browser."
 }

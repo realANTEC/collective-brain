@@ -84,19 +84,20 @@ if (typeof window !== 'undefined') void loadSemanticCore();
 /**
  * Turn real positions into the attribute set the core shader expects.
  *
- * Subsampling uses a fixed stride rather than a random pick: the points arrive
- * in corpus order, which after UMAP means consecutive entries are often
- * neighbours in the same cluster. Taking every Nth keeps every region of the
- * map represented at any tier, where slicing the first N would render one
- * corner of the embedding and drop the rest.
+ * Subsampling walks a FRACTIONAL stride rather than taking a prefix. The points
+ * arrive in corpus order, so a prefix is not a sample of the map — it is the
+ * alphabetically-earliest slice of it, and whole regions of the embedding go
+ * missing. An integer stride has the same failure whenever the ratio is under
+ * 2: floor() collapses to 1 and the walk degenerates into exactly that prefix.
+ * Stepping by count/wanted keeps coverage even at every tier.
  */
 export function buildCorePointsFromSemantic(
   data: SemanticData,
   wanted: number,
   seed = 1337,
 ): CorePointData {
-  const stride = Math.max(1, Math.floor(data.count / wanted));
-  const count = Math.min(wanted, Math.floor(data.count / stride));
+  const count = Math.min(wanted, data.count);
+  const step = data.count / count;
 
   const rand = seededRandom(seed);
   const positions = new Float32Array(count * 3);
@@ -105,7 +106,7 @@ export function buildCorePointsFromSemantic(
   const radii = new Float32Array(count);
 
   for (let i = 0; i < count; i++) {
-    const src = i * stride * 3;
+    const src = Math.min(data.count - 1, Math.floor(i * step)) * 3;
     const x = data.positions[src];
     const y = data.positions[src + 1];
     const z = data.positions[src + 2];

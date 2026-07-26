@@ -64,8 +64,11 @@ export const PRESETS: Record<
     nodeSize: number;
   }
 > = {
+  // 100,000 real positions now ship, so the high tier renders most of them
+  // rather than throwing three fifths away. The fps watchdog still demotes a
+  // machine that cannot hold the frame budget.
   high: {
-    points: 42000,
+    points: 75000,
     nodes: 96,
     arcs: 220,
     segments: 22,
@@ -74,7 +77,7 @@ export const PRESETS: Record<
     nodeSize: 6,
   },
   medium: {
-    points: 18000,
+    points: 28000,
     nodes: 72,
     arcs: 150,
     segments: 16,

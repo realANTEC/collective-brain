@@ -58,7 +58,7 @@ export function SemanticReadout() {
     <div className="mt-10 border-t border-line pt-6">
       <div className="flex items-center gap-2.5">
         <PulseDot />
-        <span className="label">Sampling the core</span>
+        <span className="label">Regions of the core</span>
       </div>
 
       <ul className="mt-4 space-y-2.5">
@@ -79,8 +79,12 @@ export function SemanticReadout() {
                 {node.label}
               </motion.span>
             </AnimatePresence>
+            {/* "51,628" alone beside "Abraham Lincoln" reads as a claim about
+                Lincoln. The label is the most prominent article in a region,
+                not the name of one, so the unit has to say what is being
+                counted. */}
             <span className="tnum shrink-0 font-mono text-[0.625rem] text-text-3">
-              {formatFull(node.size)}
+              {formatFull(node.size)} nearby
             </span>
           </li>
         ))}
@@ -88,9 +92,10 @@ export function SemanticReadout() {
 
       <p className="mt-5 text-[0.6875rem] leading-relaxed text-text-3">
         Not decoration. Every point behind this section is one of{' '}
-        <span className="tnum text-text-2">{formatFull(corpusSize)}</span> encyclopedia
-        articles, embedded and projected onto the sphere — neighbours on screen
-        are neighbours in meaning.
+        <span className="tnum text-text-2">{formatFull(corpusSize)}</span>{' '}
+        English Wikipedia articles, embedded and projected onto the sphere —
+        neighbours on screen are neighbours in meaning. Each title above is the
+        most prominent article in one region of that map.
       </p>
     </div>
   );
