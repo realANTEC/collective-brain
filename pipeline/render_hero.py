@@ -57,7 +57,14 @@ MP4_KBPS = 5200
 WEBM_KBPS = 4200
 
 PROBE_GPU = "T4"
-RENDER_GPU = "A10G"
+# T4, not A10G. Measured with pipeline/diagnose_browser.py: on T4 the published
+# NVIDIA manifests give a working Vulkan loader (vulkaninfo reports the device)
+# and ANGLE comes up on a real GPU in ~4s. On A10G in this same image
+# vulkaninfo reports no device at all and every GPU backend fails — so the
+# probe was validating the one accelerator the render then did not use, and the
+# render had no GPU path to find. This is the difference between an eight-second
+# capture and an hour of nothing.
+RENDER_GPU = "T4"
 NODE_VERSION = "22.12.0"
 PLAYWRIGHT = "1.49.1"
 
@@ -412,6 +419,39 @@ def _is_software(renderer: str) -> bool:
     )
 
 
+LAUNCH_DEADLINE = 60
+
+
+class _LaunchTimeout(Exception):
+    pass
+
+
+def _with_deadline(seconds: int, fn):
+    """
+    Cap a blocking call with SIGALRM.
+
+    Chromium's GPU init can wedge rather than error — on the wrong accelerator
+    it waits instead of failing, and a launch that never returns burns the whole
+    function timeout. An alarm turns that into an ordinary exception so the loop
+    moves on to the next backend.
+
+    Only fires on the main thread; if Modal ever runs this off it, the alarm is
+    a no-op and the function timeout is still the backstop.
+    """
+    import signal
+
+    def _fire(_signum, _frame):
+        raise _LaunchTimeout(f"exceeded {seconds}s")
+
+    previous = signal.signal(signal.SIGALRM, _fire)
+    signal.alarm(seconds)
+    try:
+        return fn()
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, previous)
+
+
 def _try_backends(playwright, extra_args: list[str] | None = None):
     """
     Launch Chromium once per backend and keep the first that reports a real GPU.
@@ -425,11 +465,14 @@ def _try_backends(playwright, extra_args: list[str] | None = None):
         args = BASE_FLAGS + flags + (extra_args or [])
         browser = None
         try:
-            browser = playwright.chromium.launch(
-                channel="chromium", headless=True, args=args
+            browser = _with_deadline(
+                LAUNCH_DEADLINE,
+                lambda: playwright.chromium.launch(
+                    channel="chromium", headless=True, args=args
+                ),
             )
             page = browser.new_page()
-            report = page.evaluate(WEBGL_JS)
+            report = _with_deadline(LAUNCH_DEADLINE, lambda: page.evaluate(WEBGL_JS))
             page.close()
         except Exception as exc:  # noqa: BLE001
             if browser:
@@ -494,7 +537,10 @@ def probe() -> dict:
 @app.function(
     gpu=RENDER_GPU,
     image=render_image,
-    timeout=3600,
+    # 20 minutes, not an hour. A capture is ~8 minutes end to end; anything past
+    # this is wedged, and the only thing a longer ceiling buys is a larger bill
+    # before anyone notices.
+    timeout=1200,
     volumes={"/store": store},
     cpu=8.0,
     memory=16384,
