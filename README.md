@@ -263,6 +263,34 @@ Two affordances exist:
 
 ---
 
+## What is precomputed on GPU
+
+Four pipelines in `pipeline/` run on Modal and produce the assets the site
+ships. They are build-time tools, not runtime dependencies — every one of them
+fails soft, and the site renders correctly with none of their output present.
+See `pipeline/README.md` for the details.
+
+| Pipeline | Produces | Why a GPU |
+| --- | --- | --- |
+| `semantic_core.py` | `public/core/points.bin`, `nodes.json` | Embeds 47,725 Wikipedia articles with BGE, k-means, PCA, spherical UMAP. The core's positions are a real semantic map — neighbours on screen are neighbours in meaning. |
+| `flow_field.py` | `public/core/flow.png` | Bakes a divergence-free curl-noise volume into a tiled atlas. The shell's motion is sampled flow rather than three `sin()` terms. |
+| `render_hero.py` | `public/hero/*` | Films the real site in headless Chrome on a genuine NVIDIA GPU, for a poster and a loop. |
+| `answer_service.py` | a deployed endpoint | RAG over the same embedding the core is built from, so citations are real articles. Off by default; see `.env.example`. |
+
+**One hard-won note on `render_hero.py`.** It must run on **T4**, not A10G.
+Measured with `diagnose_browser.py`: on T4 the published NVIDIA manifests give
+a working Vulkan loader and ANGLE reaches a real GPU in ~4s; on A10G in the
+same image `vulkaninfo` reports no device and every GPU backend fails. The
+script originally probed on T4 and rendered on A10G, so it validated the one
+accelerator it then did not use — and Chromium's GPU init *waits* rather than
+errors on an accelerator it cannot use, which turned a misconfiguration into a
+silent hour-long hang. Every launch now carries a 60s deadline and the function
+timeout is 20 minutes, so that failure mode is bounded twice.
+
+Capture is bound by `ReadPixels` stalls, not by the scene: ~0.6 frames/s at the
+2880×1620 supersampled buffer regardless of GPU. Frame count, not horsepower,
+is the lever.
+
 ## Performance
 
 Measured on the production build (`next build && next start`), landing page:
