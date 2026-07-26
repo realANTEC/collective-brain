@@ -41,6 +41,29 @@ const GLSL_PRELUDE = /* glsl */ `
   float falloff(float inner, float outer, float x) {
     return 1.0 - smoothstep(inner, outer, x);
   }
+
+  /*
+   * Rotation rate for the STRUCTURAL layer: the concept nodes and the arcs
+   * joining them. It is a single constant, deliberately, because that layer has
+   * to turn as one rigid body.
+   *
+   * Radius-dependent spin is right for the dense point shell — those are
+   * independent particles and the differential is what makes the body read as
+   * fluid. Applying it to a connection is not: slerpOnSphere bulges each arc's
+   * midpoint outward, so a per-vertex radius term spins the middle of an arc
+   * more slowly than its ends. The endpoints stay pinned to their nodes while
+   * the middle lags, and every arc slowly tears itself into a jagged chord.
+   *
+   * The drift is ~0.0036 rad/s: invisible for the first minute, ~90 degrees of
+   * shear after seven, a full revolution by half an hour. Long enough that it
+   * looks like an intentional "cocoon" forming around the core rather than a
+   * bug, and the smeared arcs then accumulate additive white until the whole
+   * frame blows out.
+   *
+   * The value equals the shell's rate at the node radius (1.2), so the
+   * structural layer still turns in sympathy with the cloud around it.
+   */
+  const float STRUCTURAL_SPIN = 0.0456;
 `;
 
 export const corePointsVertex = GLSL_PRELUDE + /* glsl */ `
@@ -181,9 +204,10 @@ export const connectionsVertex = GLSL_PRELUDE + /* glsl */ `
   void main() {
     vec3 pos = position * uScale;
 
-    // Match the core's differential rotation so connections stay anchored to
-    // the nodes they belong to.
-    float spin = uTime * 0.055 * (1.25 - length(position) * 0.35);
+    // Rigid: every vertex of every arc turns by the same angle, so an arc can
+    // never shear apart from itself or from the nodes it joins. See
+    // STRUCTURAL_SPIN.
+    float spin = uTime * STRUCTURAL_SPIN;
     float cs = cos(spin);
     float sn = sin(spin);
     pos = vec3(pos.x * cs - pos.z * sn, pos.y, pos.x * sn + pos.z * cs);
@@ -253,7 +277,9 @@ export const nodesVertex = GLSL_PRELUDE + /* glsl */ `
     float ease = 1.0 - pow(1.0 - t, 4.0);
 
     vec3 pos = position * uScale;
-    float spin = uTime * 0.055 * (1.25 - length(position) * 0.35);
+    // Same rigid rate as the connections, so a node and the arcs leaving it
+    // never drift apart.
+    float spin = uTime * STRUCTURAL_SPIN;
     float cs = cos(spin);
     float sn = sin(spin);
     pos = vec3(pos.x * cs - pos.z * sn, pos.y, pos.x * sn + pos.z * cs);

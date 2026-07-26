@@ -196,6 +196,33 @@ once after mount and writes through those. Get this wrong and the scene renders
 with its initial uniform values (`uOpacity: 0` — invisible) while every value
 you can inspect from React looks perfectly correct.
 
+### Rigid vs differential rotation
+
+The point shell rotates at a radius-dependent rate — outer strata lag the core,
+which is what makes the body read as fluid rather than as one solid object. That
+is only safe because points are **independent primitives**.
+
+The concept nodes and their connecting arcs must rotate at a **single shared
+rate** (`STRUCTURAL_SPIN` in `shaders.ts`). An arc is one primitive spanning
+several radii — `slerpOnSphere` bulges its midpoint outward — so a per-vertex
+radius term spins the middle of an arc more slowly than its ends. The endpoints
+stay pinned to their nodes while the middle lags, and every arc slowly tears
+itself into a jagged chord: invisible for a minute, ~90° of shear after seven,
+a full revolution by half an hour. It looks like an intentional cocoon forming
+around the core rather than a bug, and the smeared arcs then accumulate additive
+white until the frame blows out.
+
+Rule of thumb: anything that must stay geometrically attached to something else
+gets the rigid rate.
+
+### Clocks: never mix `performance.now()` with the rAF timestamp
+
+`PointerBridge` seeds its previous-time from `performance.now()` and advances it
+from the frame callback argument. Those are the same time origin in practice but
+are not *ordered* — a frame callback can carry a timestamp from before the effect
+that scheduled it. The delta is clamped to `>= 0` because a negative one inverts
+the impulse decay into growth and latches the scene at maximum brightness.
+
 ### Three more, on the CSS side
 
 **3. Never hand-write `-webkit-backdrop-filter`.** Declaring it next to the

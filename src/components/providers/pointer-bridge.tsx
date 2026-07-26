@@ -33,7 +33,13 @@ export function PointerBridge() {
     };
 
     const tick = (now: number) => {
-      const dt = Math.min(0.064, (now - last) / 1000);
+      // Clamped at both ends. `last` is seeded from performance.now() but
+      // updated from the rAF timestamp, and those are not guaranteed to be
+      // ordered: a frame callback can carry a timestamp from before the effect
+      // that scheduled it. A negative delta here would invert the decay below
+      // and make the impulse *grow* instead of fade, latching the whole scene
+      // at maximum brightness.
+      const dt = Math.min(0.064, Math.max(0, (now - last) / 1000));
       last = now;
       scene.smoothPointerX = damp(scene.smoothPointerX, scene.pointerX, 4.5, dt);
       scene.smoothPointerY = damp(scene.smoothPointerY, scene.pointerY, 4.5, dt);
