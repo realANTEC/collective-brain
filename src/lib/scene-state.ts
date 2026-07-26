@@ -62,6 +62,18 @@ export interface SceneState {
   /** Index of the concept node under the pointer, or -1. */
   hoveredNode: number;
 
+  /**
+   * A direction in the core's own frame that the scene should turn to face,
+   * or null. Set when a question resolves to a region of the embedding: the
+   * body rotates until that region is pointing at the camera, so the answer
+   * arrives with the core physically looking at where the concept lives.
+   * Unit length; null means "nothing requested", which is the default and
+   * costs nothing.
+   */
+  focusDir: [number, number, number] | null;
+  /** 0 -> 1 how strongly the focus rotation overrides free orbit. */
+  focusStrength: number;
+
   /** Adaptive quality, resolved once on mount then downgraded if fps sags. */
   quality: QualityTier;
   /** True when the OS asks for reduced motion. */
@@ -87,6 +99,8 @@ export const scene: SceneState = {
   searchPulse: 0,
   queryCount: 0,
   hoveredNode: -1,
+  focusDir: null,
+  focusStrength: 0,
   quality: 'high',
   reducedMotion: false,
   ready: false,
@@ -149,6 +163,28 @@ export function setQuality(quality: QualityTier) {
  * the scene picks this up next frame and decays it back to zero, so callers
  * never have to clean up.
  */
+/**
+ * Point the core at a region of its own embedding.
+ *
+ * `dir` is a direction in the core's local frame — the same space the shipped
+ * positions live in — so a retrieved article's coordinates can be handed
+ * straight in. Normalised here rather than at the call site because callers
+ * will typically pass a mean of several positions, which is not unit length.
+ */
+export function focusCore(dir: [number, number, number], strength = 1) {
+  const [x, y, z] = dir;
+  const length = Math.hypot(x, y, z);
+  if (!Number.isFinite(length) || length < 1e-6) return;
+  scene.focusDir = [x / length, y / length, z / length];
+  scene.focusStrength = Math.min(1, Math.max(0, strength));
+}
+
+/** Hand control back to free orbit. */
+export function releaseCoreFocus() {
+  scene.focusDir = null;
+  scene.focusStrength = 0;
+}
+
 export function pulseScene(strength = 1) {
   scene.searchPulse = Math.min(1, scene.searchPulse + strength);
   scene.queryCount += 1;

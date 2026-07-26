@@ -35,7 +35,12 @@ import {
   neutralFlowTexture,
 } from './flow-field';
 import { sampleChoreography } from './choreography';
-import { orbit, stepOrbitInertia } from './interaction';
+import {
+  angleDelta,
+  orbit,
+  solveFocusRotation,
+  stepOrbitInertia,
+} from './interaction';
 import { scene as sceneState, type QualityTier } from '@/lib/scene-state';
 import { clamp, damp } from '@/lib/utils';
 
@@ -272,6 +277,7 @@ export function KnowledgeCore({ tier }: { tier: QualityTier }) {
       closest: new THREE.Vector3(),
       lookTarget: new THREE.Vector3(),
       camPos: new THREE.Vector3(),
+      camDir: new THREE.Vector3(),
       reveal: 0,
       scale: 1,
       zoom: 1,
@@ -384,7 +390,29 @@ export function KnowledgeCore({ tier }: { tier: QualityTier }) {
     orbit.zoom = damp(orbit.zoom, orbit.targetZoom, 6, dt);
     scratch.zoom = orbit.zoom;
 
+    /* ── Focus ────────────────────────────────────────────────────────────
+       When a question resolves to a region of the embedding, turn the body
+       until that region faces the camera. Solved as yaw/pitch and eased into
+       the same values drag writes, so the two never fight over the transform.
+       A drag cancels it outright: a core that pulls back against your hand is
+       broken, whatever it is trying to show you. */
     if (groupRef.current) {
+      // The solver assumes R = Ry(yaw) * Rx(pitch); the default 'XYZ' order
+      // couples the two and makes the closed form wrong.
+      groupRef.current.rotation.order = 'YXZ';
+
+      if (sceneState.focusDir && !orbit.dragging) {
+        scratch.camDir.copy(camera.position).normalize();
+        const aim = solveFocusRotation(sceneState.focusDir, scratch.camDir);
+        if (aim) {
+          const k = 1 - Math.exp(-2.6 * dt * sceneState.focusStrength);
+          orbit.yaw += angleDelta(orbit.yaw, aim.yaw) * k;
+          orbit.pitch += angleDelta(orbit.pitch, aim.pitch) * k;
+          orbit.yawVelocity = 0;
+          orbit.pitchVelocity = 0;
+        }
+      }
+
       groupRef.current.rotation.y = orbit.yaw;
       groupRef.current.rotation.x = orbit.pitch;
     }
