@@ -30,8 +30,19 @@ import modal
 # ── Composition ───────────────────────────────────────────────────────────────
 
 WIDTH, HEIGHT = 1920, 1080
-FPS = 60
-LOOP_SECONDS = 8.0
+# 30fps, 6 seconds: 201 frames rather than 522.
+#
+# Measured on a T4 at the 2880x1620 supersampled buffer, capture runs at
+# ~0.6 frames/s — the driver reports "GPU stall due to ReadPixels", so the
+# screenshot round-trip dominates, not the scene. 522 frames is 14.5 minutes of
+# capture before any encoding, which does not fit the function timeout and
+# times out having written nothing.
+#
+# The subject is a slowly drifting particle field, so halving the temporal
+# resolution costs nothing visible, and the supersample stays at 1.5 because
+# that is what the spatial quality actually depends on.
+FPS = 30
+LOOP_SECONDS = 6.0
 DISSOLVE_SECONDS = 0.7
 
 # Chrome renders at this multiple of the CSS viewport and everything is

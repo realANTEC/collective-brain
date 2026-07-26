@@ -1,0 +1,20 @@
+{
+  "source": "the live site, rendered in headless Chrome on an NVIDIA GPU",
+  "renderer": "ANGLE (NVIDIA, Vulkan 1.4.312 (NVIDIA Tesla T4 (0x00001EB8)), NVIDIA)",
+  "backend": "angle-vulkan",
+  "gpu": "T4",
+  "resolution": "1920x1080",
+  "supersample": 1.5,
+  "fps": 30,
+  "frames": 180,
+  "seconds": 6.0,
+  "loop": "cross-dissolve, 0.7s \u2014 nothing in the scene shares a period, so the seam is a mix rather than a match",
+  "sectionFloat": 0.75,
+  "sizes": {
+    "core-loop.mp4": 3780079,
+    "core-loop.webm": 3153337,
+    "core-poster.jpg": 274235,
+    "core-og.jpg": 106784
+  },
+  "run": "20260727-021859"
+}

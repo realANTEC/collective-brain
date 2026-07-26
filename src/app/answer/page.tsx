@@ -25,13 +25,17 @@ const DESCRIPTION = metaDescription(ANSWER.summary);
 export const metadata: Metadata = {
   title: ANSWER.query,
   description: DESCRIPTION,
+  // Next replaces `openGraph` per route rather than deep-merging it, so the
+  // share image has to be restated here or this page ships without one.
   openGraph: {
     title: `${ANSWER.query} — Collective Brain`,
     description: DESCRIPTION,
+    images: [{ url: '/hero/core-og.jpg', width: 1200, height: 630 }],
   },
   twitter: {
     title: `${ANSWER.query} — Collective Brain`,
     description: DESCRIPTION,
+    images: ['/hero/core-og.jpg'],
   },
 };
 

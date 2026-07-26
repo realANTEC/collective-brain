@@ -41,6 +41,21 @@ const SITE = {
   url: 'https://collectivebrain.ai',
 };
 
+/**
+ * The share card is a real frame of the real scene.
+ *
+ * Rendered by pipeline/render_hero.py in headless Chrome on an NVIDIA GPU, so
+ * the thing people see in a link preview is the actual Knowledge Core — the
+ * semantic embedding, the flow field and all — rather than an illustration of
+ * it. Exported once at build time; it costs a visitor nothing.
+ */
+const OG_IMAGE = {
+  url: '/hero/core-og.jpg',
+  width: 1200,
+  height: 630,
+  alt: 'The Collective Brain Knowledge Core: a luminous sphere of points, each one an encyclopedia article positioned by meaning.',
+} as const;
+
 export const metadata: Metadata = {
   metadataBase: new URL(SITE.url),
   title: {
@@ -64,11 +79,27 @@ export const metadata: Metadata = {
     siteName: SITE.name,
     title: SITE.title,
     description: SITE.description,
+    images: [OG_IMAGE],
+    // Platforms that support it play the loop; the rest fall back to the image
+    // above. Neither costs the page anything — these are fetched by the
+    // crawler, not by the browser.
+    videos: [
+      {
+        // Absolute, unlike the image: Next resolves `images` against
+        // metadataBase but leaves `videos` as authored, and a crawler given a
+        // relative og:video simply drops it.
+        url: `${SITE.url}/hero/core-loop.mp4`,
+        type: 'video/mp4',
+        width: 1920,
+        height: 1080,
+      },
+    ],
   },
   twitter: {
     card: 'summary_large_image',
     title: SITE.title,
     description: SITE.description,
+    images: [OG_IMAGE.url],
   },
   robots: { index: true, follow: true },
   icons: {
