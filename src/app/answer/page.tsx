@@ -1,5 +1,7 @@
 import type { Metadata } from 'next';
+import { Suspense } from 'react';
 
+import { AnswerRoute } from '@/components/answer/answer-route';
 import { AnswerView } from '@/components/answer/answer-view';
 import { ANSWER } from '@/lib/content';
 
@@ -34,5 +36,12 @@ export const metadata: Metadata = {
 };
 
 export default function AnswerPage() {
-  return <AnswerView />;
+  // useSearchParams suspends during prerender, so the curated view is the
+  // fallback: the statically generated HTML is the sample answer, and a live
+  // query swaps in on the client once the parameter is readable.
+  return (
+    <Suspense fallback={<AnswerView />}>
+      <AnswerRoute />
+    </Suspense>
+  );
 }

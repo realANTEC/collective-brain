@@ -8,6 +8,10 @@ import { ArrowUpRight, CornerDownLeft, Search, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { HERO } from '@/lib/content';
 import { scene, pulseScene } from '@/lib/scene-state';
+import {
+  isAnswerServiceConfigured,
+  warmAnswerService,
+} from '@/lib/answer-service';
 import { usePrefersReducedMotion, useTypewriter } from '@/lib/hooks';
 import { EASE, SPRING_MASS, SPRING_SNAP } from '@/lib/motion';
 
@@ -68,6 +72,10 @@ export function SearchField({
     const active = focused || submitting;
     scene.searchFocusTarget = active ? 1 : 0;
     onActiveChange?.(active);
+    // Overlap the container's cold start with the time spent typing. The
+    // service scales to zero, so this is usually the difference between an
+    // answer in two seconds and one in forty.
+    if (focused) warmAnswerService();
     return () => {
       scene.searchFocusTarget = 0;
     };
@@ -151,6 +159,15 @@ export function SearchField({
       setValue(query);
       inputRef.current?.blur();
       pulseScene(1);
+
+      // With a live endpoint the answer page owns the waiting: it can report
+      // real progress and a real cold start, where this field can only mime it.
+      // Staging a fabricated traversal in front of a request that is genuinely
+      // running would add latency to tell the user something untrue.
+      if (isAnswerServiceConfigured()) {
+        router.push(`/answer?q=${encodeURIComponent(query)}`);
+        return;
+      }
 
       if (reduced) {
         router.push('/answer');
