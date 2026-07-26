@@ -51,6 +51,46 @@ STORE_CHARS = 700
 INDEX_TAG = "v1"
 INDEX_ROOT = "/cache/rag"
 
+# Where a question lands on the core.
+#
+# semantic_core.py persists the manifold's subsample: the embeddings it was
+# fitted on and the 3D direction each one ended up at. Those two arrays are all
+# that is needed to turn a question into a place — embed it, find its nearest
+# neighbours among the positioned articles, average their directions. No second
+# model and no second corpus.
+#
+# Compacted into its own index rather than read from /core/v2 directly: that
+# directory holds the full 3.46M x 384 matrix at 2.7GB, and a scale-to-zero
+# service should not pull that across on every cold start to use 3% of it.
+CORE_ROOT = "/cache/core"
+CORE_SRC = f"{CORE_ROOT}/v2"
+POS_ROOT = f"{CORE_ROOT}/pos"
+POS_TAG = "v1"
+# Neighbours averaged to place a query. Too few and the aim jitters between
+# adjacent articles; too many and every question drifts toward the centroid of
+# the whole map.
+LOCATE_K = 24
+# Minimum cosine between a neighbour's direction and the top match's before it
+# is allowed to vote. Roughly 32 degrees. Guards against a wide neighbour spread
+# normalising toward the cloud's centroid instead of the match's region.
+#
+# WHAT THIS DOES NOT FIX, measured rather than assumed. Tightening this from
+# 0.5 to 0.85 moved "photosynthesis" and "black hole" from 9.8 degrees apart to
+# 8.1 — because 15-22 of the 24 neighbours agree at either threshold. The
+# neighbours are not the problem: the projection genuinely places those topics
+# eight degrees apart.
+#
+# That is a property of the map, not a bug here. Spherical UMAP at
+# n_neighbors=25 optimises local structure and leaves global arrangement weakly
+# constrained, and the corpus is mostly biography, geography and sport — so all
+# of science occupies one small patch of the sphere and everything technical
+# lands in it. Napoleon sits 90-110 degrees from every science question; jet
+# engines sit 22 degrees from black holes.
+#
+# So the aim resolves BROAD DOMAINS, not individual topics, and anything built
+# on it should say that rather than imply it flies to a concept.
+LOCATE_COHERENCE = 0.85
+
 TOP_K = 4               # passages handed to the model
 POOL = 16               # candidates considered before de-duplication
 MAX_NEW_TOKENS = 220
@@ -218,6 +258,63 @@ def build_index(scan: int = SCAN, n_docs: int = N_DOCS, tag: str = INDEX_TAG):
 # ══════════════════════════════════════════════════════════════════════════
 
 
+@app.function(timeout=1800, volumes={"/cache": cache}, memory=32768, cpu=4.0)
+def build_position_index(tag: str = POS_TAG):
+    """
+    Compact the manifold subsample into a standalone position index.
+
+    Reads the artifacts semantic_core.py persisted, keeps only the rows that
+    actually have a position, and writes ~92MB the service can load in a second
+    instead of the 2.7GB full matrix.
+    """
+    import json as _json
+    import os
+
+    import numpy as np
+
+    sub_idx = np.load(f"{CORE_SRC}/sub_idx.npy")
+    dirs = np.load(f"{CORE_SRC}/sub_dirs.npy").astype(np.float32)
+    # mmap: only the subsample's rows are ever touched, and materialising the
+    # whole matrix to slice 3% of it would need 2.7GB of resident memory.
+    emb = np.load(f"{CORE_SRC}/embeddings.npy", mmap_mode="r")
+    titles = _json.load(open(f"{CORE_SRC}/titles.json", encoding="utf-8"))
+
+    if len(sub_idx) != dirs.shape[0]:
+        raise RuntimeError(
+            f"subsample/direction mismatch: {len(sub_idx)} vs {dirs.shape[0]}"
+        )
+
+    sub_emb = np.ascontiguousarray(emb[sub_idx]).astype(np.float16)
+    sub_titles = [titles[int(i)] for i in sub_idx]
+
+    out = f"{POS_ROOT}/{tag}"
+    os.makedirs(out, exist_ok=True)
+    np.save(f"{out}/emb.npy", sub_emb)
+    np.save(f"{out}/dirs.npy", dirs)
+    with open(f"{out}/titles.json", "w", encoding="utf-8") as fh:
+        _json.dump(sub_titles, fh, ensure_ascii=False)
+    with open(f"{out}/meta.json", "w", encoding="utf-8") as fh:
+        _json.dump(
+            {
+                "positioned": int(sub_emb.shape[0]),
+                "dim": int(sub_emb.shape[1]),
+                "source": CORE_SRC,
+                "embedModel": EMBED_MODEL,
+            },
+            fh,
+            indent=2,
+        )
+    cache.commit()
+
+    report = {
+        "positioned": int(sub_emb.shape[0]),
+        "bytes": int(sub_emb.nbytes + dirs.nbytes),
+        "path": out,
+    }
+    print("POSITION_INDEX " + _json.dumps(report, indent=2), flush=True)
+    return report
+
+
 @app.cls(
     gpu=GPU,
     volumes={"/cache": cache},
@@ -248,6 +345,23 @@ class AnswerService:
         except Exception as exc:  # index missing -> the endpoint 503s, honestly
             print(f"index unavailable: {exc}", flush=True)
             self.meta, self.docs, self.emb = {}, [], None
+
+        # Position index. Optional: without it the service answers exactly as
+        # before and simply reports no location, rather than 503ing over a
+        # feature that is decoration on top of the answer.
+        try:
+            root = f"{POS_ROOT}/{POS_TAG}"
+            self.pos_titles = json.load(open(f"{root}/titles.json", encoding="utf-8"))
+            self.pos_emb = torch.from_numpy(np.load(f"{root}/emb.npy")).cuda().half()
+            self.pos_dirs = torch.from_numpy(np.load(f"{root}/dirs.npy")).cuda().float()
+            self.pos_ready = (
+                self.pos_emb.shape[0] == self.pos_dirs.shape[0] == len(self.pos_titles)
+            )
+        except Exception as exc:  # noqa: BLE001
+            print(f"position index unavailable: {exc}", flush=True)
+            self.pos_emb = self.pos_dirs = None
+            self.pos_titles = []
+            self.pos_ready = False
 
         self.etok = AutoTokenizer.from_pretrained("/models/embed")
         self.emodel = AutoModel.from_pretrained("/models/embed").cuda().half().eval()
@@ -287,7 +401,59 @@ class AnswerService:
             picked.append({"index": idx, "score": score, **doc})
             if len(picked) >= k:
                 break
-        return picked
+        # The query vector goes back too: locating the question on the core
+        # reuses it, and embedding the same string twice would double the only
+        # part of the request that is not the language model.
+        return picked, q
+
+    def _locate(self, q):
+        """
+        Where on the core does this question live?
+
+        Cosine against the positioned articles, then a similarity-weighted mean
+        of their directions. Weighting matters: an unweighted mean lets the
+        24th neighbour pull as hard as the 1st, and questions that straddle two
+        regions end up aimed at the empty space between them.
+        """
+        if not self.pos_ready:
+            return None, None
+
+        torch = self.torch
+        with torch.inference_mode():
+            sims = (self.pos_emb @ q.T).squeeze(1).float()
+            top = torch.topk(sims, min(LOCATE_K, sims.shape[0]))
+
+            dirs = self.pos_dirs[top.indices]            # (K, 3)
+            anchor = dirs[0]                             # the strongest match
+            agree = dirs @ anchor
+            keep = agree >= LOCATE_COHERENCE
+            keep[0] = True                               # the anchor always votes
+
+            kept_dirs = dirs[keep]
+            kept_scores = top.values[keep]
+
+            # Softmax over cosine, sharpened: raw cosines here sit in a narrow
+            # band and normalise to almost uniform weights.
+            w = torch.softmax(kept_scores * 20.0, dim=0).unsqueeze(1)
+            vec = (kept_dirs * w).sum(0)
+            norm = torch.linalg.vector_norm(vec)
+            if float(norm) < 1e-6:
+                return None, None
+            vec = (vec / norm).tolist()
+
+            kept_idx = top.indices[keep].tolist()
+            kept_vals = kept_scores.tolist()
+            voters = int(keep.sum())
+
+        neighbours = [
+            {"title": self.pos_titles[i], "score": round(s, 4)}
+            for s, i in zip(kept_vals[:6], kept_idx[:6])
+        ]
+        return [round(v, 5) for v in vec], {
+            "neighbours": neighbours,
+            "voters": voters,
+            "considered": int(top.indices.shape[0]),
+        }
 
     def _generate(self, question: str, passages):
         torch = self.torch
@@ -334,7 +500,8 @@ class AnswerService:
         import time
 
         t0 = time.time()
-        passages = self._retrieve(question, max(1, min(k, 8)))
+        passages, qvec = self._retrieve(question, max(1, min(k, 8)))
+        core_position, core_detail = self._locate(qvec)
         text, mean_prob = self._generate(question, passages)
 
         top_sim = passages[0]["score"] if passages else 0.0
@@ -363,6 +530,21 @@ class AnswerService:
                 f"0.65 * clamp((topCosine - {SIM_FLOOR}) / "
                 f"{round(SIM_CEIL - SIM_FLOOR, 2)}) + 0.35 * meanTokenProbability. "
                 "A heuristic, not a calibrated probability."
+            ),
+            # Where this question sits on the rendered core, as a unit vector in
+            # the core's own frame — the client hands it straight to focusCore.
+            # Null when the position index is absent.
+            "corePosition": core_position,
+            # The positioned articles that vote determined it. Returned so the
+            # aim is explainable rather than a bare triple of numbers, and so
+            # the UI can say what it is flying toward.
+            "coreNeighbours": (core_detail or {}).get("neighbours", []),
+            # How many of the retrieved neighbours agreed on a region. A low
+            # ratio means the question straddles the map and the aim is weak.
+            "coreAgreement": (
+                None
+                if not core_detail
+                else f"{core_detail['voters']}/{core_detail['considered']}"
             ),
             "model": LLM,
             "retriever": EMBED_MODEL,
