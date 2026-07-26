@@ -32,3 +32,8 @@ yarn-error.log*
 
 # machine-local tool settings (launch.json is shared, settings.local.json is not)
 .claude/settings.local.json
+
+# python pipeline
+__pycache__/
+*.pyc
+.venv/

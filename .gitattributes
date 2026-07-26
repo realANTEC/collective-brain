@@ -12,3 +12,7 @@
 
 # Generated: collapse in diffs and exclude from language stats.
 package-lock.json linguist-generated=true -diff
+
+# Precomputed embedding: must never be line-ending normalised
+*.bin binary
+public/core/points.bin binary
