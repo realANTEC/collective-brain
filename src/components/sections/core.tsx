@@ -13,6 +13,7 @@ import {
   StaggerGroup,
   StaggerItem,
 } from '@/components/ui';
+import { SemanticReadout } from './semantic-readout';
 import { CORE_SECTION } from '@/lib/content';
 import { EASE, VIEWPORT, pickVariants, riseInFlat } from '@/lib/motion';
 import { usePrefersReducedMotion } from '@/lib/hooks';
@@ -76,6 +77,8 @@ export function CoreSection() {
           />
 
           <Lead className="mt-7">{CORE_SECTION.body}</Lead>
+
+          <SemanticReadout />
         </div>
 
         {/* Facets, pinned right and dropped a beat below the headline so the

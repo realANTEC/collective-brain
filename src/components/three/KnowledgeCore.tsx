@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 
@@ -22,6 +22,12 @@ import {
   nucleusFragment,
   nucleusVertex,
 } from './shaders';
+import {
+  buildConceptNodesFromSemantic,
+  buildCorePointsFromSemantic,
+  loadSemanticCore,
+  type SemanticData,
+} from './semantic-core';
 import { sampleChoreography } from './choreography';
 import { orbit, stepOrbitInertia } from './interaction';
 import { scene as sceneState, type QualityTier } from '@/lib/scene-state';
@@ -106,8 +112,41 @@ export function KnowledgeCore({ tier }: { tier: QualityTier }) {
 
   /* ── Geometry (built once per quality tier) ──────────────────────────── */
 
-  const core = useMemo(() => buildCorePoints(preset.points), [preset.points]);
-  const nodes = useMemo(() => buildConceptNodes(preset.nodes), [preset.nodes]);
+  /* ── Geometry ─────────────────────────────────────────────────────────────
+     Real semantic positions when the embedding is available, procedural
+     otherwise. The fallback is not a formality: the whole hero rides on this
+     geometry, so a failed fetch has to degrade to a beautiful sphere rather
+     than to nothing. The request starts when the module is imported, so it has
+     normally landed while the preloader is still playing. */
+
+  const [semantic, setSemantic] = useState<SemanticData | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    loadSemanticCore().then((data) => {
+      if (alive) setSemantic(data);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const core = useMemo(
+    () =>
+      semantic
+        ? buildCorePointsFromSemantic(semantic, preset.points)
+        : buildCorePoints(preset.points),
+    [semantic, preset.points],
+  );
+
+  const nodes = useMemo(
+    () =>
+      semantic
+        ? buildConceptNodesFromSemantic(semantic, preset.nodes).data
+        : buildConceptNodes(preset.nodes),
+    [semantic, preset.nodes],
+  );
+
   const connections = useMemo(
     () =>
       buildConnections(nodes, {

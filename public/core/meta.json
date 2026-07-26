@@ -1,0 +1,10 @@
+{
+  "corpus": "wikimedia/wikipedia:20231101.simple",
+  "documents": 47725,
+  "model": "BAAI/bge-small-en-v1.5",
+  "points": 40000,
+  "nodes": 96,
+  "quantScale": 16000.0,
+  "projection": "PCA(40) -> UMAP(3, cosine, n_neighbors=25)",
+  "note": "Positions are a real semantic embedding of Simple English Wikipedia."
+}
