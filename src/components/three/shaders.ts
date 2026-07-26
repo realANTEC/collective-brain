@@ -78,6 +78,14 @@ export const corePointsVertex = GLSL_PRELUDE + /* glsl */ `
   uniform float uDpr;
   uniform float uScale;       // breathing / scroll-driven scale
 
+  // Baked flow field. See flow-field.ts for the atlas contract. uFlowAmt is 0
+  // until the texture has loaded and validated, and the shell falls back to the
+  // sin() stack below — a missing asset costs the scene nothing.
+  uniform sampler2D uFlow;
+  uniform float uFlowAmt;
+  uniform float uFlowSize;    // voxels per axis of the volume
+  uniform float uFlowTiles;   // z-slices per atlas row / column
+
   attribute vec3  aScatter;
   attribute float aSeed;
   attribute float aRadius;
@@ -86,6 +94,41 @@ export const corePointsVertex = GLSL_PRELUDE + /* glsl */ `
   varying float vGlow;
   varying float vDepth;
   varying float vVis;
+
+  /*
+   * One trilinear-ish fetch from the flow atlas. p is in field space, where
+   * 1.0 is a full period of the (periodic) volume.
+   *
+   * The volume is flattened into a grid of z-slices, so bilinear in xy comes
+   * free from the sampler and only the z blend is done by hand — two fetches
+   * and a mix, no sampler3D, and a fallback that is just "texture missing".
+   *
+   * The tiles carry no gutters, so xy is clamped to a tile's inner half-texel:
+   * without that, hardware bilinear at a tile edge would blend in a pixel
+   * belonging to an unrelated slice. The cost is that xy stops wrapping within
+   * half a texel of the seam. The field is periodic, so the discontinuity
+   * there is a fraction of one texel — under 0.003 world units of
+   * displacement, which is well below a pixel at any camera distance.
+   */
+  vec3 sampleFlow(vec3 p) {
+    float size = uFlowSize;
+    float edge = size * uFlowTiles;          // atlas width in texels
+
+    vec2 texel = clamp(fract(p.xy) * size, 0.5, size - 0.5);
+
+    float zf = fract(p.z) * size - 0.5;
+    float z0 = floor(zf);                    // may be -1; mod() handles it
+    float k0 = mod(z0, size);
+    float k1 = mod(z0 + 1.0, size);
+
+    vec2 t0 = vec2(mod(k0, uFlowTiles), floor(k0 / uFlowTiles));
+    vec2 t1 = vec2(mod(k1, uFlowTiles), floor(k1 / uFlowTiles));
+
+    vec3 slice0 = texture2D(uFlow, (t0 * size + texel) / edge).rgb;
+    vec3 slice1 = texture2D(uFlow, (t1 * size + texel) / edge).rgb;
+
+    return (mix(slice0, slice1, zf - z0) - 0.5) * 2.0;
+  }
 
   void main() {
     // ── Assembly ──────────────────────────────────────────────────────────
@@ -97,13 +140,51 @@ export const corePointsVertex = GLSL_PRELUDE + /* glsl */ `
     vec3 pos = mix(aScatter, position, ease);
 
     // ── Ambient life ──────────────────────────────────────────────────────
+    // Fallback: three sin() terms on a per-point phase. Every particle moves
+    // on its own clock, which reads as shimmer rather than as motion.
     float phase = aSeed * 6.2831853;
     vec3 wobble = vec3(
       sin(uTime * 0.34 + phase),
       cos(uTime * 0.28 + phase * 1.73),
       sin(uTime * 0.41 + phase * 0.61)
-    ) * 0.022 * ease;
-    pos += wobble;
+    );
+
+    if (uFlowAmt > 0.0) {
+      // Two layers of the baked divergence-free field, drifting through the
+      // volume in opposite directions at different spatial frequencies.
+      // Neighbouring points read almost the same vector, so the shell shears
+      // and folds instead of each particle jittering independently — and
+      // because the field has no sources or sinks, the cloud never bunches up
+      // or thins out anywhere.
+      //
+      // fract() on the drift keeps the sample coordinate bounded. The field is
+      // periodic, so subtracting whole periods is a no-op; without it
+      // uTime * rate grows until float32 can no longer resolve a texel, and
+      // the motion quietly seizes up over a long session.
+      vec3 drift1 = fract(uTime * vec3( 0.017, -0.011,  0.013));
+      vec3 drift2 = fract(uTime * vec3(-0.023,  0.019, -0.015));
+
+      // Sampled at the REST position, not at pos: the field is then fixed to
+      // the core's own frame and turns with it, so the turbulence belongs to
+      // the body rather than to the world it is spinning through.
+      vec3 flowVec =
+          sampleFlow(position * 0.27 + 0.50 + drift1) * 1.72
+        + sampleFlow(position * 0.61 + 0.17 + drift2) * 0.88;
+
+      // The baked field carries a measured per-component sigma of 0.358, and
+      // these two weights put the result's RMS displacement at 0.0271 world
+      // units against the sin() stack's 0.0271 — the same amplitude, sampled
+      // from a different distribution. Mean is slightly lower (0.024 vs 0.026)
+      // and the tail is longer: the top 1% reach 0.059 where the sin() stack
+      // is bounded at 0.038. That tail is not clipped, deliberately. It is
+      // where the eddies are, it is coherent (a whole neighbourhood bulges
+      // together, not one point flying off), and even the maximum is well
+      // inside the 0.13 of radial jitter the shell already carries — so it
+      // folds the surface without moving the silhouette.
+      wobble = mix(wobble, flowVec * (0.6 + aSeed * 0.8), uFlowAmt);
+    }
+
+    pos += wobble * 0.022 * ease;
 
     // Slow differential rotation: outer strata lag the core, which is what
     // makes the body read as fluid rather than as one rigid object.

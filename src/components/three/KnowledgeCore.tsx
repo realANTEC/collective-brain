@@ -28,6 +28,12 @@ import {
   loadSemanticCore,
   type SemanticData,
 } from './semantic-core';
+import {
+  FLOW_SIZE,
+  FLOW_TILES,
+  loadFlowField,
+  neutralFlowTexture,
+} from './flow-field';
 import { sampleChoreography } from './choreography';
 import { orbit, stepOrbitInertia } from './interaction';
 import { scene as sceneState, type QualityTier } from '@/lib/scene-state';
@@ -147,6 +153,34 @@ export function KnowledgeCore({ tier }: { tier: QualityTier }) {
     [semantic, preset.nodes],
   );
 
+  /* ── Flow field ───────────────────────────────────────────────────────────
+     The baked curl-noise volume that drives the shell's ambient motion. Held
+     in a ref rather than in state: it changes nothing structural, so there is
+     no reason to re-render the scene when it lands. Null until (and unless) it
+     loads, which leaves uFlowAmt at 0 and the sin() fallback in charge.
+
+     Applied to the dense point shell ONLY. The nodes and their arcs share one
+     rigid rotation precisely so an arc cannot shear against its endpoints; a
+     per-vertex displacement field is the same class of mistake with the same
+     result. See the STRUCTURAL_SPIN note in shaders.ts. */
+
+  const flowTex = useRef<THREE.Texture | null>(null);
+
+  useEffect(() => {
+    // Vertex texture fetch. WebGL2 guarantees at least 16 units, but a driver
+    // reporting none would silently return black — which decodes to a constant
+    // -1 pull on every axis rather than to no motion.
+    if (gl.capabilities.maxVertexTextures < 1) return;
+
+    let alive = true;
+    loadFlowField().then((tex) => {
+      if (alive) flowTex.current = tex;
+    });
+    return () => {
+      alive = false;
+    };
+  }, [gl]);
+
   const connections = useMemo(
     () =>
       buildConnections(nodes, {
@@ -176,6 +210,14 @@ export function KnowledgeCore({ tier }: { tier: QualityTier }) {
         uColorA: { value: COLOR.blue.clone() },
         uColorB: { value: COLOR.violet.clone() },
         uColorC: { value: COLOR.cyan.clone() },
+        // Flow field. The sampler is bound to a neutral 1x1 from the start so
+        // it is never unbound, and uFlowAmt gates the shader's sampling
+        // entirely — at 0 the shell moves exactly as it did before the asset
+        // existed.
+        uFlow: { value: neutralFlowTexture() as THREE.Texture },
+        uFlowAmt: { value: 0 },
+        uFlowSize: { value: FLOW_SIZE },
+        uFlowTiles: { value: FLOW_TILES },
       },
       connections: {
         uTime: { value: 0 },
@@ -405,6 +447,21 @@ export function KnowledgeCore({ tier }: { tier: QualityTier }) {
     u.core.uPointerAmt.value = damp(u.core.uPointerAmt.value, pointerAmt, 6, dt);
     u.core.uScale.value = damp(u.core.uScale.value, scratch.scale, 7, dt);
     u.core.uOpacity.value = scratch.opacity * reveal;
+
+    // Bind through the live uniform object, and keep checking: a quality
+    // downgrade rebuilds the uniforms and would otherwise drop the atlas back
+    // to the neutral 1x1. Ramping uFlowAmt rather than switching it means the
+    // shell cross-fades from the sin() fallback into the field over ~2s
+    // instead of visibly changing gear the moment the PNG lands.
+    if (flowTex.current && u.core.uFlow.value !== flowTex.current) {
+      u.core.uFlow.value = flowTex.current;
+    }
+    u.core.uFlowAmt.value = damp(
+      u.core.uFlowAmt.value,
+      flowTex.current ? 1 : 0,
+      1.4,
+      dt,
+    );
 
     u.connections.uTime.value = t;
     u.connections.uDraw.value = damp(
