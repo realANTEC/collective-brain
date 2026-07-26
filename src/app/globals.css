@@ -1,0 +1,627 @@
+@import 'tailwindcss';
+
+/* Tailwind v4 scans for class usage from the CSS file's location outward.
+   globals.css lives in src/app, so we point it at the whole src tree. */
+@source '../';
+
+/* ══════════════════════════════════════════════════════════════════════════
+   COLLECTIVE BRAIN — DESIGN TOKENS
+   ──────────────────────────────────────────────────────────────────────────
+   Design language: "Sediment". Knowledge settles in luminous layers inside a
+   matte void. Everything is instrument-panel precise — hairline rules, mono
+   index labels, editorial serif accents — with light used sparingly so that
+   when it appears, it reads as signal rather than decoration.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@theme {
+  /* ── Surfaces ─────────────────────────────────────────────────────────── */
+  --color-void: #050508;
+  --color-surface-1: #0a0a10;
+  --color-surface-2: #101018;
+  --color-surface-3: #16161f;
+  --color-surface-4: #1d1d28;
+
+  /* ── Hairlines ────────────────────────────────────────────────────────── */
+  --color-line: rgb(255 255 255 / 0.07);
+  --color-line-soft: rgb(255 255 255 / 0.04);
+  --color-line-strong: rgb(255 255 255 / 0.14);
+
+  /* ── Type ─────────────────────────────────────────────────────────────── */
+  --color-text-1: #edeef2;
+  --color-text-2: #9498a6;
+  --color-text-3: #5b5f6e;
+  --color-text-4: #383b45;
+
+  /* ── Accents ──────────────────────────────────────────────────────────── */
+  --color-blue: #3d6bff;
+  --color-blue-soft: #6e90ff;
+  --color-blue-deep: #1b3ba8;
+  --color-violet: #8a6bff;
+  --color-violet-soft: #a894ff;
+  --color-cyan: #6ee7f5;
+  --color-amber: #ffb86b;
+  --color-rose: #ff7a8a;
+
+  /* ── Font families (bound to next/font variables in layout.tsx) ───────── */
+  --font-sans:
+    var(--font-geist-sans), 'Inter', ui-sans-serif, system-ui, -apple-system,
+    'Segoe UI', sans-serif;
+  --font-mono:
+    var(--font-geist-mono), ui-monospace, 'SF Mono', 'Roboto Mono', monospace;
+  --font-serif: var(--font-instrument-serif), 'Times New Roman', Georgia, serif;
+
+  /* ── Fluid type scale ─────────────────────────────────────────────────── */
+  --text-display: clamp(3.25rem, 10.5vw, 10.5rem);
+  --text-display--line-height: 0.88;
+  --text-display--letter-spacing: -0.045em;
+
+  --text-h1: clamp(2.5rem, 6.4vw, 5.5rem);
+  --text-h1--line-height: 0.94;
+  --text-h1--letter-spacing: -0.038em;
+
+  --text-h2: clamp(2rem, 4.4vw, 3.75rem);
+  --text-h2--line-height: 1;
+  --text-h2--letter-spacing: -0.032em;
+
+  --text-h3: clamp(1.375rem, 2.3vw, 2rem);
+  --text-h3--line-height: 1.14;
+  --text-h3--letter-spacing: -0.022em;
+
+  --text-lead: clamp(1.0625rem, 1.35vw, 1.3125rem);
+  --text-lead--line-height: 1.55;
+  --text-lead--letter-spacing: -0.012em;
+
+  --text-body: 1rem;
+  --text-body--line-height: 1.65;
+
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.6;
+
+  --text-xs: 0.8125rem;
+  --text-xs--line-height: 1.55;
+
+  --text-label: 0.6875rem;
+  --text-label--line-height: 1;
+  --text-label--letter-spacing: 0.18em;
+
+  --text-micro: 0.625rem;
+  --text-micro--line-height: 1;
+  --text-micro--letter-spacing: 0.22em;
+
+  /* ── Radii ────────────────────────────────────────────────────────────── */
+  --radius-xs: 6px;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+  --radius-2xl: 36px;
+
+  /* ── Easings ──────────────────────────────────────────────────────────── */
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out-quint: cubic-bezier(0.83, 0, 0.17, 1);
+  --ease-settle: cubic-bezier(0.22, 1.16, 0.36, 1);
+  --ease-linear: linear;
+
+  /* ── Motion durations ─────────────────────────────────────────────────── */
+  --duration-fast: 180ms;
+  --duration-base: 420ms;
+  --duration-slow: 900ms;
+
+  /* ── Keyframe-backed animations ───────────────────────────────────────── */
+  --animate-breathe: breathe 4.5s var(--ease-in-out-quint) infinite;
+  --animate-drift: drift 26s linear infinite;
+  --animate-shimmer: shimmer 2.6s var(--ease-in-out-quint) infinite;
+  --animate-pulse-ring: pulse-ring 2.8s var(--ease-out-expo) infinite;
+  --animate-caret: caret 1.05s steps(1) infinite;
+  --animate-scan: scan 7s var(--ease-in-out-quint) infinite;
+  --animate-orbit: orbit 18s linear infinite;
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.035);
+  }
+}
+
+@keyframes drift {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  33% {
+    transform: translate3d(3%, -4%, 0) scale(1.06);
+  }
+  66% {
+    transform: translate3d(-3%, 3%, 0) scale(0.97);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -160% 0;
+  }
+  100% {
+    background-position: 260% 0;
+  }
+}
+
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.82);
+    opacity: 0.7;
+  }
+  70% {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+}
+
+@keyframes caret {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes scan {
+  0%,
+  100% {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  12% {
+    opacity: 0.5;
+  }
+  88% {
+    opacity: 0.5;
+  }
+  100% {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes orbit {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Registering the angle makes it an animatable <angle> rather than a string. */
+@property --aurora-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes aurora-spin {
+  to {
+    --aurora-angle: 360deg;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   BASE
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+    border-color: var(--color-line);
+  }
+
+  html {
+    /* Lenis drives scroll; native smooth-scroll would fight it. */
+    scroll-behavior: auto;
+    -webkit-text-size-adjust: 100%;
+    background-color: var(--color-void);
+    /* Belt-and-braces against horizontal overflow. Setting it here as well as
+       on body matters: overflow on body only propagates to the viewport while
+       html is `visible`, so pinning both removes the ambiguity. */
+    overflow-x: clip;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--color-void);
+    color: var(--color-text-1);
+    font-family: var(--font-sans);
+    font-size: var(--text-body);
+    line-height: var(--text-body--line-height);
+    font-feature-settings: 'ss01' 1, 'cv01' 1, 'cv11' 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    overflow-x: clip;
+  }
+
+  /* The custom cursor replaces the native one on precise pointers only —
+     touch devices keep their native affordances. */
+  @media (hover: hover) and (pointer: fine) {
+    body[data-custom-cursor='on'],
+    body[data-custom-cursor='on'] * {
+      cursor: none !important;
+    }
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6,
+  p,
+  figure,
+  blockquote {
+    margin: 0;
+  }
+
+  ul,
+  ol {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+
+  button {
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: none;
+    padding: 0;
+  }
+
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+
+  img,
+  svg,
+  canvas {
+    display: block;
+    max-width: 100%;
+  }
+
+  input,
+  textarea {
+    font: inherit;
+    color: inherit;
+    background: none;
+    border: none;
+    outline: none;
+  }
+
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--color-text-3);
+  }
+
+  ::selection {
+    background: rgb(61 107 255 / 0.32);
+    color: #fff;
+  }
+
+  :focus-visible {
+    outline: 1px solid var(--color-blue-soft);
+    outline-offset: 3px;
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar {
+    width: 9px;
+    height: 9px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgb(255 255 255 / 0.08);
+    border-radius: 99px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgb(255 255 255 / 0.16);
+    background-clip: content-box;
+  }
+
+  /* Respect the OS-level motion preference everywhere at once. Individual
+     components additionally read this via the usePrefersReducedMotion hook so
+     they can swap behaviour, not just speed. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   COMPONENT PRIMITIVES
+   Handcrafted, no framework components. Each of these exists because the
+   effect cannot be expressed as a short utility chain.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@layer components {
+  /* ── Glass ────────────────────────────────────────────────────────────────
+     Premium glass is four stacked ingredients: a translucent tint, a real
+     backdrop blur + saturation lift, a hairline border, and — the part most
+     implementations miss — a 1px inner top highlight that simulates the lit
+     edge of a physical pane, plus a bottom-weighted shadow for mass. */
+  .glass {
+    position: relative;
+    background: linear-gradient(
+      180deg,
+      rgb(255 255 255 / 0.045) 0%,
+      rgb(255 255 255 / 0.018) 42%,
+      rgb(255 255 255 / 0.028) 100%
+    );
+    /* Do NOT hand-write -webkit-backdrop-filter next to this. Lightning CSS
+       (Tailwind v4's transformer) deduplicates the pair against its browser
+       targets and keeps only the -webkit- form, silently dropping the standard
+       property — and current Chrome reports
+       CSS.supports('-webkit-backdrop-filter') as false, so every glass surface
+       on the site ends up with no blur at all. Declare the standard property
+       only and let the transformer add prefixes it actually needs. */
+    backdrop-filter: blur(22px) saturate(150%);
+    border: 1px solid rgb(255 255 255 / 0.075);
+    box-shadow:
+      inset 0 1px 0 0 rgb(255 255 255 / 0.09),
+      inset 0 -1px 0 0 rgb(255 255 255 / 0.02),
+      0 1px 2px rgb(0 0 0 / 0.4),
+      0 12px 32px -8px rgb(0 0 0 / 0.55),
+      0 40px 80px -32px rgb(0 0 0 / 0.7);
+  }
+
+  /* Denser variant for panels that sit directly on the void. */
+  .glass-deep {
+    position: relative;
+    background: linear-gradient(
+      180deg,
+      rgb(22 22 31 / 0.82) 0%,
+      rgb(10 10 16 / 0.88) 100%
+    );
+    /* See .glass — the standard property only. */
+    backdrop-filter: blur(28px) saturate(160%);
+    border: 1px solid rgb(255 255 255 / 0.07);
+    box-shadow:
+      inset 0 1px 0 0 rgb(255 255 255 / 0.07),
+      0 20px 60px -20px rgb(0 0 0 / 0.8);
+  }
+
+  /* Cursor-tracked specular sweep. Components set --mx/--my in px on hover;
+     the highlight follows the pointer across the pane like a real reflection. */
+  .glass-specular::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 500ms var(--ease-out-expo);
+    background: radial-gradient(
+      420px circle at var(--mx, 50%) var(--my, 50%),
+      rgb(255 255 255 / 0.07),
+      transparent 62%
+    );
+  }
+  .glass-specular:hover::before,
+  .glass-specular:focus-within::before {
+    opacity: 1;
+  }
+
+  /* ── Hairline dividers ────────────────────────────────────────────────── */
+  .rule {
+    height: 1px;
+    width: 100%;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgb(255 255 255 / 0.11) 18%,
+      rgb(255 255 255 / 0.11) 82%,
+      transparent
+    );
+  }
+
+  .rule-v {
+    width: 1px;
+    background: linear-gradient(
+      180deg,
+      transparent,
+      rgb(255 255 255 / 0.1) 20%,
+      rgb(255 255 255 / 0.1) 80%,
+      transparent
+    );
+  }
+
+  /* ── Instrument label — the small mono uppercase eyebrow ──────────────── */
+  .label {
+    font-family: var(--font-mono);
+    font-size: var(--text-label);
+    line-height: 1;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--color-text-3);
+    font-weight: 500;
+  }
+
+  /* ── Text gradients ───────────────────────────────────────────────────── */
+  .text-lume {
+    background: linear-gradient(
+      178deg,
+      #ffffff 0%,
+      #e6e9f5 38%,
+      #9aa2c4 82%,
+      #6f7799 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .text-accent-lume {
+    background: linear-gradient(
+      100deg,
+      var(--color-blue-soft) 0%,
+      var(--color-violet-soft) 48%,
+      var(--color-cyan) 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* ── Grain ────────────────────────────────────────────────────────────────
+     Film grain generated at runtime via SVG turbulence — zero network cost,
+     and it survives any viewport size without tiling artefacts. */
+  .grain {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+  }
+
+  /* ── Aurora ring ──────────────────────────────────────────────────────────
+     A conic gradient rotated by an animated custom property. Registering the
+     property with @property is what makes the angle interpolable at all — an
+     unregistered custom property is a string to the animation engine and will
+     not tween, which is why most conic-border tricks resort to rotating a
+     whole pseudo-element and clipping it.
+
+     The ring is a border-box/padding-box mask sandwich: the gradient fills the
+     element, then the mask punches out everything inside the border width,
+     leaving only a 1px lit edge. */
+  .aurora-ring::after {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 600ms var(--ease-out-expo);
+    background: conic-gradient(
+      from var(--aurora-angle),
+      transparent 0deg,
+      var(--color-blue) 55deg,
+      var(--color-violet) 140deg,
+      var(--color-cyan) 205deg,
+      transparent 280deg,
+      transparent 360deg
+    );
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    animation: aurora-spin 5s linear infinite;
+  }
+
+  .aurora-ring[data-lit='true']::after {
+    opacity: 1;
+  }
+
+  /* ── Focus ring used by interactive glass ─────────────────────────────── */
+  .ring-lume {
+    box-shadow:
+      0 0 0 1px rgb(110 144 255 / 0.55),
+      0 0 34px -6px rgb(61 107 255 / 0.6);
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   UTILITIES
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@utility grid-lines {
+  /* The faint survey grid that sits behind content sections. */
+  background-image:
+    linear-gradient(to right, rgb(255 255 255 / 0.028) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(255 255 255 / 0.028) 1px, transparent 1px);
+  background-size: 72px 72px;
+}
+
+@utility mask-fade-y {
+  mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    black 12%,
+    black 88%,
+    transparent
+  );
+}
+
+@utility mask-fade-x {
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    black 8%,
+    black 92%,
+    transparent
+  );
+}
+
+@utility mask-fade-b {
+  mask-image: linear-gradient(to bottom, black 55%, transparent 100%);
+}
+
+@utility gpu {
+  transform: translateZ(0);
+  will-change: transform;
+  backface-visibility: hidden;
+}
+
+@utility tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+/* Horizontal page gutters — one definition, used by every section. */
+@utility gutter {
+  padding-inline: 1.25rem;
+  @media (width >= 40rem) {
+    padding-inline: 2.5rem;
+  }
+  @media (width >= 80rem) {
+    padding-inline: 4rem;
+  }
+  @media (width >= 120rem) {
+    padding-inline: 6rem;
+  }
+}
+
+/* Vertical section rhythm. */
+@utility section-y {
+  padding-block: clamp(6rem, 14vh, 11rem);
+}
+
+/* The measure for long-form copy — never let prose exceed it. */
+@utility measure {
+  max-width: 62ch;
+}

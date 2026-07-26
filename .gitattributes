@@ -1,0 +1,14 @@
+# Normalise line endings. Everything in this repo is authored LF; without this
+# Git's Windows default rewrites checkouts to CRLF and the next contributor on a
+# different platform sees every file as modified.
+* text=auto eol=lf
+
+# Binary-ish assets Git should never try to diff or convert.
+*.png binary
+*.jpg binary
+*.woff2 binary
+*.glb binary
+*.mp3 binary
+
+# Generated: collapse in diffs and exclude from language stats.
+package-lock.json linguist-generated=true -diff

@@ -1,0 +1,34 @@
+# dependencies
+node_modules/
+.pnp
+.pnp.*
+
+# build output
+.next/
+out/
+build/
+dist/
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+
+# environment
+.env
+.env*.local
+
+# vercel
+.vercel
+
+# editor / os
+.DS_Store
+Thumbs.db
+*.swp
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# machine-local tool settings (launch.json is shared, settings.local.json is not)
+.claude/settings.local.json

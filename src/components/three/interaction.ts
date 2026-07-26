@@ -1,0 +1,159 @@
+/* ══════════════════════════════════════════════════════════════════════════
+   CORE INTERACTION
+   ──────────────────────────────────────────────────────────────────────────
+   Direct manipulation of the Knowledge Core, kept deliberately separate from
+   the scroll rig.
+
+   Design decision: dragging rotates the *core*, not the camera. The camera is
+   already owned by the scroll choreography, so letting the pointer move it too
+   would produce two authorities fighting over one transform. Rotating the
+   object instead means both systems compose cleanly — you can spin the core
+   mid-scroll and neither interaction stutters.
+
+   Zoom is bound to shift+wheel and pinch rather than plain wheel. Hijacking
+   the wheel over a full-viewport canvas would break page scrolling, which is
+   a worse sin than making zoom slightly less discoverable.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+export const orbit = {
+  yaw: 0,
+  pitch: 0,
+  yawVelocity: 0,
+  pitchVelocity: 0,
+  /** Multiplier applied to the core's scale. 1 = neutral. */
+  zoom: 1,
+  targetZoom: 1,
+  dragging: false,
+  /** True once the user has manipulated the core — used to retire the hint. */
+  engaged: false,
+};
+
+const PITCH_LIMIT = 0.85; // radians — stop short of gimbal-flipping the poles
+
+export function resetOrbit() {
+  orbit.yaw = 0;
+  orbit.pitch = 0;
+  orbit.yawVelocity = 0;
+  orbit.pitchVelocity = 0;
+  orbit.targetZoom = 1;
+}
+
+/**
+ * Attach drag/pinch handlers to the canvas element.
+ * Returns a disposer.
+ */
+export function attachOrbitControls(el: HTMLElement) {
+  let lastX = 0;
+  let lastY = 0;
+  let pointerId: number | null = null;
+  const pinch = new Map<number, { x: number; y: number }>();
+  let pinchStartDistance = 0;
+  let pinchStartZoom = 1;
+
+  const onPointerDown = (e: PointerEvent) => {
+    pinch.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (pinch.size === 2) {
+      const [a, b] = [...pinch.values()];
+      pinchStartDistance = Math.hypot(a.x - b.x, a.y - b.y);
+      pinchStartZoom = orbit.targetZoom;
+      orbit.dragging = false;
+      return;
+    }
+
+    pointerId = e.pointerId;
+    lastX = e.clientX;
+    lastY = e.clientY;
+    orbit.dragging = true;
+    orbit.engaged = true;
+    orbit.yawVelocity = 0;
+    orbit.pitchVelocity = 0;
+    el.setPointerCapture?.(e.pointerId);
+  };
+
+  const onPointerMove = (e: PointerEvent) => {
+    if (pinch.has(e.pointerId)) {
+      pinch.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    }
+
+    if (pinch.size === 2 && pinchStartDistance > 0) {
+      const [a, b] = [...pinch.values()];
+      const dist = Math.hypot(a.x - b.x, a.y - b.y);
+      orbit.targetZoom = clampZoom(pinchStartZoom * (dist / pinchStartDistance));
+      return;
+    }
+
+    if (!orbit.dragging || e.pointerId !== pointerId) return;
+
+    const dx = e.clientX - lastX;
+    const dy = e.clientY - lastY;
+    lastX = e.clientX;
+    lastY = e.clientY;
+
+    // 0.005 rad/px puts a full rotation at roughly a 1250px drag — heavy
+    // enough to feel like mass, light enough to spin with one gesture.
+    orbit.yaw += dx * 0.005;
+    orbit.pitch = Math.max(
+      -PITCH_LIMIT,
+      Math.min(PITCH_LIMIT, orbit.pitch + dy * 0.005),
+    );
+
+    // Carry velocity so releasing mid-gesture keeps the core spinning.
+    orbit.yawVelocity = dx * 0.005;
+    orbit.pitchVelocity = dy * 0.005;
+  };
+
+  const endPointer = (e: PointerEvent) => {
+    pinch.delete(e.pointerId);
+    if (pinch.size < 2) pinchStartDistance = 0;
+    if (e.pointerId === pointerId) {
+      orbit.dragging = false;
+      pointerId = null;
+    }
+  };
+
+  const onWheel = (e: WheelEvent) => {
+    // Plain wheel belongs to the page. Only the shift modifier claims it.
+    if (!e.shiftKey) return;
+    e.preventDefault();
+    orbit.targetZoom = clampZoom(orbit.targetZoom * (1 - e.deltaY * 0.0012));
+    orbit.engaged = true;
+  };
+
+  el.addEventListener('pointerdown', onPointerDown);
+  el.addEventListener('pointermove', onPointerMove, { passive: true });
+  el.addEventListener('pointerup', endPointer);
+  el.addEventListener('pointercancel', endPointer);
+  el.addEventListener('pointerleave', endPointer);
+  el.addEventListener('wheel', onWheel, { passive: false });
+
+  return () => {
+    el.removeEventListener('pointerdown', onPointerDown);
+    el.removeEventListener('pointermove', onPointerMove);
+    el.removeEventListener('pointerup', endPointer);
+    el.removeEventListener('pointercancel', endPointer);
+    el.removeEventListener('pointerleave', endPointer);
+    el.removeEventListener('wheel', onWheel);
+  };
+}
+
+const clampZoom = (z: number) => Math.min(2.1, Math.max(0.55, z));
+
+/** Advance drag inertia. Called once per frame from the render loop. */
+export function stepOrbitInertia(dt: number) {
+  if (orbit.dragging) return;
+
+  orbit.yaw += orbit.yawVelocity;
+  orbit.pitch = Math.max(
+    -PITCH_LIMIT,
+    Math.min(PITCH_LIMIT, orbit.pitch + orbit.pitchVelocity),
+  );
+
+  // Exponential decay tuned so a flick coasts for roughly a second.
+  const decay = Math.exp(-3.2 * dt);
+  orbit.yawVelocity *= decay;
+  orbit.pitchVelocity *= decay;
+
+  if (Math.abs(orbit.yawVelocity) < 1e-5) orbit.yawVelocity = 0;
+  if (Math.abs(orbit.pitchVelocity) < 1e-5) orbit.pitchVelocity = 0;
+}
